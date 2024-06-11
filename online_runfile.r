@@ -26,10 +26,16 @@ df_sub = data_format[data_format[,"EID"] %in% pred_id, ]
 
 # Start with an hour of data ---------------------------------------------------
 df_sub_start = NULL
+ind_list = list()
+i_j = 1
 for(j in unique(df_sub[,"EID"])) {
+    ind_list[[i_j]] = 1:4
     df_j = df_sub[df_sub[,'EID'] == j, ]
-    df_sub_start = rbind(df_sub_start, df_j[1:4, ])
+    df_sub_start = rbind(df_sub_start, df_j[ind_list[[i_j]], ])
+    
+    i_j = i_j + 1
 }
+prev_ind_list = ind_list
 
 trialNum = 1
 max_ind = 10
@@ -149,7 +155,10 @@ colnames(otype) = c('hemo','hr','map','lactate')
 
 # Change inputs every minute and save the resulting mcmc_out output ------------
 it_num = 1
-while(nrow(Y) > 0) {
+# while(nrow(Y) > 0) {
+while(it_num < 59) {
+    
+    # Note: max number of rows per Y_i is 48 (corresponds to 12 hours)
     print(paste0("iteration = ", it_num))
     # Initialize Y -------------------------------------------------------------
     if(it_num == 1) {
@@ -168,10 +177,16 @@ while(nrow(Y) > 0) {
         if(length(na_lact) > 0) Y[na_lact,"lactate"] = Y[na_lact-1,"lactate"]
     }
     
+    # Subset the correct Dn_omega ----------------------------------------------
+    Dn_omega_sub = list()
+    for(i in 1:length(EIDs)) {
+        Dn_omega_sub[[i]] = Dn_omega[[i]][ind_list[[i]]]
+    }
+    
     # Run procedure ------------------------------------------------------------
     s_time = proc.time();
     mcmc_out = mcmc_online( par, par_index, A, W, B, Y, x, z, steps, burnin, ind, 
-                            trialNum, Dn_omega, simulation, max_ind, df_num, 
+                            trialNum, Dn_omega_sub, simulation, max_ind, df_num, 
                             n_cores, otype, pcov, pscale, s_time)
     
     # Plot output / update chart plots -----------------------------------------
@@ -189,14 +204,28 @@ while(nrow(Y) > 0) {
     
     if(it_num == 1 | it_num %% 5 == 0) {
         plotting_fnc(df_sub_start, EIDs, B_chain, Hc_chain, Hr_chain, Map_chain, 
-                     La_chain, it_num, prev_state_avg)   
+                     La_chain, it_num, prev_state_avg, ind_list, prev_ind_list)   
     }
     
     # Keep track of previous posterior probabilities ---------------------------
     if(it_num > 1) {
-        prev_state_avg = rbind( colMeans(B_chain == 1), colMeans(B_chain == 2),
+        curr_state_avg = rbind( colMeans(B_chain == 1), colMeans(B_chain == 2),
                                 colMeans(B_chain == 3), colMeans(B_chain == 4),
                                 colMeans(B_chain == 5))
+        for(i in 1:length(EIDs)) {
+            prev_post_prob = prev_state_avg[2:6, prev_state_avg[1,] == EIDs[i]]
+            curr_post_prob = curr_state_avg[,Y[,'EID'] == EIDs[i]]
+            
+            if(ncol(prev_post_prob) == 48) {
+                if(sum(ind_list[[i]] %in% prev_ind_list[[i]]) != length(ind_list[[i]])) {
+                    prev_post_prob = prev_post_prob[,-1]
+                }
+            }
+            curr_post_prob[,1:ncol(prev_post_prob)] = 0.5 * (curr_post_prob[,1:ncol(prev_post_prob)] + prev_post_prob)    
+            curr_state_avg[,Y[,'EID'] == EIDs[i]] = curr_post_prob
+        }
+        
+        prev_state_avg = curr_state_avg
         prev_state_avg = rbind(Y[,'EID'], prev_state_avg)
     }
     
@@ -209,7 +238,8 @@ while(nrow(Y) > 0) {
     b_curr = B_chain[nrow(B_chain), ]
     
     # Reinitialize all of the other variables ----------------------------------
-    new_data = add_data(it_num, pred_id, data_format, b_curr, Y_curr_EIDs)
+    new_data = add_data(it_num, pred_id, data_format, b_curr, Y_curr_EIDs,
+                        Y_curr_hemo, Y_curr_hr, Y_curr_map, Y_curr_lact)
     Y = new_data$Y
     if(nrow(Y) == 0) break; # No more updates
     
@@ -222,16 +252,8 @@ while(nrow(Y) > 0) {
     W = new_data$W
     B = new_data$B
     df_sub_start = new_data$df_sub_start
-    
-    
-    # Initialize missing Y values ----------------------------------------------
-    for(e in EIDs) {
-        row_e = which(Y[,"EID"] == e)
-        Y[row_e[-length(row_e)], "hemo"] = Y_curr_hemo[Y_curr_EIDs==e]
-        Y[row_e[-length(row_e)], "hr"] = Y_curr_hr[Y_curr_EIDs==e]
-        Y[row_e[-length(row_e)], "map"] = Y_curr_map[Y_curr_EIDs==e]
-        Y[row_e[-length(row_e)], "lactate"] = Y_curr_lact[Y_curr_EIDs==e]
-    }
+    prev_ind_list = ind_list
+    ind_list = new_data$ind_list
     
     it_num = it_num + 1
 }

@@ -40,7 +40,7 @@ mcmc_online = function( par, par_index, A, W, B, Y, x, z, steps, burnin, ind,
     # pscale = rep( 1, n_group)
   
     # Begin the MCMC algorithm -------------------------------------------------
-    chain_length_MASTER = 5000
+    chain_length_MASTER = 8000
     chain = matrix( 0, chain_length_MASTER, length(par)) # steps
     B_chain = hc_chain = hr_chain = bp_chain = la_chain = matrix( 0, chain_length_MASTER, nrow(Y)) # steps-burnin
     accept = rep( 0, n_group)
@@ -228,7 +228,7 @@ mcmc_online = function( par, par_index, A, W, B, Y, x, z, steps, burnin, ind,
         if(ttt%%1==0)  cat('--->',ttt,'\n')
         
         e_time = proc.time();
-        if(e_time[3] - s_time[3] > 15) time_frame = F
+        if(e_time[3] - s_time[3] > 10) time_frame = F
     }
     # ---------------------------------------------------------------------------
 
@@ -278,22 +278,43 @@ initialize_Y <- function(Y, EIDs) {
     return(Y)
 }
 
-add_data = function(it_num, pred_id, data_format, b_curr, Y_curr_EIDs) {
+add_data = function(it_num, pred_id, data_format, b_curr, Y_curr_EIDs,
+                    Y_curr_hemo, Y_curr_hr, Y_curr_map, Y_curr_lact) {
     
     new_rows = 4 + it_num
     
     df_sub = data_format[data_format[,"EID"] %in% pred_id, ]
     
     df_sub_start = NULL
+    ind_list = list()
+    i_j = 1
     no_more_data = T
     for(j in unique(df_sub[,"EID"])) {
         df_j = df_sub[df_sub[,'EID'] == j, ]
+        
         if(new_rows <= nrow(df_j)) {
             no_more_data = F
-            df_sub_start = rbind(df_sub_start, df_j[1:new_rows, ])   
+            
+            # Max number of rows is 48!
+            if(new_rows > 48) {
+                ind_list[[i_j]] = (new_rows-47):new_rows   
+                df_sub_start = rbind(df_sub_start, df_j[ind_list[[i_j]], ])
+            } else {
+                ind_list[[i_j]] = 1:new_rows
+                df_sub_start = rbind(df_sub_start, df_j[ind_list[[i_j]], ])
+            }
         } else {
-            df_sub_start = rbind(df_sub_start, df_j)
+            # Max number of rows is 48!
+            if(nrow(df_j) > 48) {
+                ind_list[[i_j]] = (nrow(df_j)-47):nrow(df_j)   
+                df_sub_start = rbind(df_sub_start, df_j[ind_list[[i_j]], ])
+            } else {
+                ind_list[[i_j]] = 1:nrow(df_j)
+                df_sub_start = rbind(df_sub_start, df_j)
+            }
         }
+        
+        i_j = i_j + 1
     }
     
     if(no_more_data) {
@@ -320,30 +341,68 @@ add_data = function(it_num, pred_id, data_format, b_curr, Y_curr_EIDs) {
     A = list()
     W = list()
     B = list()
-    
+
     for(i in EIDs){
         
         A[[i]] = matrix(par[par_index$vec_alpha_tilde], ncol =1)
         W[[i]] = matrix(par[par_index$omega_tilde], ncol =1)
         
         b_temp_init = b_curr[Y_curr_EIDs == i]
-        b_temp = c(b_temp_init, b_temp_init[length(b_temp_init)])
+        
+        df_j = df_sub[df_sub[,'EID'] == i, ]
+        if(new_rows <= nrow(df_j)) {
+            b_temp = c(b_temp_init, b_temp_init[length(b_temp_init)])
+            if(new_rows > 48) {
+                b_temp = b_temp[-1]
+            } 
+        } else {
+            b_temp = b_temp_init
+        }
         
         B[[i]] = matrix(b_temp, ncol = 1)
+        
+        # Initialize missing Y values ------------------------------------------
+        row_i = which(Y[,"EID"] == i)
+        
+        if(length(row_i) > sum(Y_curr_EIDs==i)) {
+            # Added Data
+            Y[row_i[-length(row_i)], "hemo"] = Y_curr_hemo[Y_curr_EIDs==i]
+            Y[row_i[-length(row_i)], "hr"] = Y_curr_hr[Y_curr_EIDs==i]
+            Y[row_i[-length(row_i)], "map"] = Y_curr_map[Y_curr_EIDs==i]
+            Y[row_i[-length(row_i)], "lactate"] = Y_curr_lact[Y_curr_EIDs==i]
+        } else {
+            if(new_rows <= nrow(df_j)) {
+                # Moving Data
+                Y[row_i[-length(row_i)], "hemo"] = Y_curr_hemo[Y_curr_EIDs==i][-1]
+                Y[row_i[-length(row_i)], "hr"] = Y_curr_hr[Y_curr_EIDs==i][-1]
+                Y[row_i[-length(row_i)], "map"] = Y_curr_map[Y_curr_EIDs==i][-1]
+                Y[row_i[-length(row_i)], "lactate"] = Y_curr_lact[Y_curr_EIDs==i][-1]
+            } else {
+                # Reinitializing Data
+                Y[row_i, "hemo"] = Y_curr_hemo[Y_curr_EIDs==i]
+                Y[row_i, "hr"] = Y_curr_hr[Y_curr_EIDs==i]
+                Y[row_i, "map"] = Y_curr_map[Y_curr_EIDs==i]
+                Y[row_i, "lactate"] = Y_curr_lact[Y_curr_EIDs==i]
+            }
+            
+        }
     }
     
     return(list( Y=Y, EIDs=EIDs, x = x, z = z, otype = otype, 
-                 A = A, W = W, B = B, df_sub_start = df_sub_start))
+                 A = A, W = W, B = B, df_sub_start = df_sub_start,
+                 ind_list = ind_list))
 }
 
 plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain, 
-                         Map_chain, La_chain, it_num, prev_state_avg) {
+                         Map_chain, La_chain, it_num, prev_state_avg,
+                         ind_list, prev_ind_list) {
     
     pdf_title = paste0("Plots/iteration_", it_num, ".pdf")
     pdf(pdf_title)
     panel_dim = c(4,1)
     inset_dim = c(0,-.18)
     par(mfrow=panel_dim, mar=c(2,4,2,4), bg='black', fg='green')
+    ind_i = 1
     for(i in EIDs){
     
         indices_i = (use_data[,'EID']==i)
@@ -365,7 +424,14 @@ plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain,
                                colMeans(B_chain[, indices_i] == 4),
                                colMeans(B_chain[, indices_i] == 5))
         prev_post_prob = prev_state_avg[2:6, prev_state_avg[1,] == i]
-        curr_post_prob[,1:ncol(prev_post_prob)] = 0.5 * (curr_post_prob[,1:ncol(prev_post_prob)] + prev_post_prob)
+        
+        if(ncol(prev_post_prob) == 48) {
+            if(sum(ind_list[[ind_i]] %in% prev_ind_list[[ind_i]]) != length(ind_list[[ind_i]])) {
+                prev_post_prob = prev_post_prob[,-1]
+            }
+        }
+        curr_post_prob[,1:ncol(prev_post_prob)] = 0.5 * (curr_post_prob[,1:ncol(prev_post_prob)] + prev_post_prob)    
+        
         
         pb = barplot(curr_post_prob, 
                      col=c( 'dodgerblue', 'firebrick1', 'yellow2', 'green', 'darkgray'), 
@@ -512,6 +578,8 @@ plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain,
         abline(v = rbc_times_bar-0.5, col = 'darkorchid1', lwd = 1)
         abline(v = rbc_admin_times_bar-0.5, col = 'aquamarine', lwd = 1)
         abline(h = c, col = 'yellow', lwd = 2)
+    
+        ind_i = ind_i + 1
     }
     dev.off()
 }
