@@ -82,6 +82,7 @@ par = par_temp
 par[par_index$vec_zeta] = c(-7.2405, 1.5, -5.2152,   1, -2.6473,  -1, -5.1475,  -1, 
                             -9.4459,  -1, -7.2404,   2, -5.2151,   1, -7.1778, 1.5, 
                             -2.6523,   0, -9.4459,  -1, -7.2404, 1.5, -5.2151,   1)
+par[par_index$vec_init] = c(0,0,0,0)
 
 b_chain = c(mcmc_out_temp$B_chain[nrow(mcmc_out_temp$B_chain), ])
 
@@ -103,19 +104,19 @@ for(i in EIDs){
     W[[i]] = matrix(par[par_index$omega_tilde], ncol =1)
     
     b_temp = rep(1, sum(Y[,"EID"] == as.numeric(i)))
-    if(sum(z[Y[,"EID"] == as.numeric(i), 2]) >= 3) {
-        sub_z = z[Y[,"EID"] == as.numeric(i), 2]
-        s_bleed = min(which(sub_z != 0))
-        if(s_bleed == 1) {
-            b_temp = c(2,2,3,3)
-        } else if(s_bleed == 2) {
-            b_temp = c(1,2,2,3)
-        } else if(s_bleed == 3) {
-            b_temp = c(1,1,2,2)
-        } else {
-            b_temp = c(1,1,1,2)
-        }
-    }
+    # if(sum(z[Y[,"EID"] == as.numeric(i), 2]) >= 3) {
+    #     sub_z = z[Y[,"EID"] == as.numeric(i), 2]
+    #     s_bleed = min(which(sub_z != 0))
+    #     if(s_bleed == 1) {
+    #         b_temp = c(2,2,3,3)
+    #     } else if(s_bleed == 2) {
+    #         b_temp = c(1,2,2,3)
+    #     } else if(s_bleed == 3) {
+    #         b_temp = c(1,1,2,2)
+    #     } else {
+    #         b_temp = c(1,1,1,2)
+    #     }
+    # }
     
     B[[i]] = matrix(b_temp, ncol = 1)
 }
@@ -155,8 +156,7 @@ colnames(otype) = c('hemo','hr','map','lactate')
 
 # Change inputs every minute and save the resulting mcmc_out output ------------
 it_num = 1
-# while(nrow(Y) > 0) {
-while(it_num < 59) {
+while(nrow(Y) > 0) {
     
     # Note: max number of rows per Y_i is 48 (corresponds to 12 hours)
     print(paste0("iteration = ", it_num))
@@ -189,12 +189,13 @@ while(it_num < 59) {
                             trialNum, Dn_omega_sub, simulation, max_ind, df_num, 
                             n_cores, otype, pcov, pscale, s_time)
     
-    # Plot output / update chart plots -----------------------------------------
+    # Update chart plots -------------------------------------------------------
     B_chain   = mcmc_out$B_chain[1:mcmc_out$ttt, ]
     Hr_chain  = mcmc_out$hr_chain[1:mcmc_out$ttt, ]
     Map_chain = mcmc_out$bp_chain[1:mcmc_out$ttt, ]
     Hc_chain  = mcmc_out$hc_chain[1:mcmc_out$ttt, ]
     La_chain  = mcmc_out$la_chain[1:mcmc_out$ttt, ]
+    RBC_rule_vec = mcmc_out$RBC_rule_vec
     if(it_num == 1) {
         prev_state_avg = rbind( colMeans(B_chain == 1), colMeans(B_chain == 2),
                                 colMeans(B_chain == 3), colMeans(B_chain == 4),
@@ -202,10 +203,17 @@ while(it_num < 59) {
         prev_state_avg = rbind(Y[,'EID'], prev_state_avg)
     }
     
-    if(it_num == 1 | it_num %% 5 == 0) {
-        plotting_fnc(df_sub_start, EIDs, B_chain, Hc_chain, Hr_chain, Map_chain, 
-                     La_chain, it_num, prev_state_avg, ind_list, prev_ind_list)   
-    }
+    # Save information to translate to R-Shiny App -----------------------------
+    info_list = list(df_sub_start, EIDs, B_chain, Hc_chain, Hr_chain, Map_chain, 
+                     La_chain, it_num, prev_state_avg, ind_list, prev_ind_list,
+                     RBC_rule_vec)
+    save(info_list, file = 'Model_out/info_list.rda')
+    
+    # if(it_num == 1 | it_num %% 5 == 0) {
+    #     plotting_fnc(df_sub_start, EIDs, B_chain, Hc_chain, Hr_chain, Map_chain, 
+    #                  La_chain, it_num, prev_state_avg, ind_list, prev_ind_list,
+    #                  RBC_rule_vec)   
+    # }
     
     # Keep track of previous posterior probabilities ---------------------------
     if(it_num > 1) {

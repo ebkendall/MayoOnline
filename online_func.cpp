@@ -347,6 +347,7 @@ Rcpp::List update_b_i_online(const arma::vec EIDs, const arma::vec &par,
     
     arma::field<arma::vec> B_return(EIDs.n_elem);
     arma::field<arma::field<arma::mat>> Dn_return(EIDs.n_elem);
+    arma::vec rbc_rule_return(EIDs.n_elem, arma::fill::zeros);
     
     for (int ii = 0; ii < EIDs.n_elem; ii++) {
         int i = EIDs(ii);
@@ -487,8 +488,9 @@ Rcpp::List update_b_i_online(const arma::vec EIDs, const arma::vec &par,
         }
         B_return(ii) = B_temp;
         Dn_return(ii) = Dn_temp;
+        rbc_rule_return(ii) = rbc_rule;
     }
-    Rcpp::List B_Dn = Rcpp::List::create(B_return, Dn_return);
+    Rcpp::List B_Dn = Rcpp::List::create(B_return, Dn_return, rbc_rule_return);
     
     return B_Dn;
 }

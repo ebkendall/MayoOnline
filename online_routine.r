@@ -88,6 +88,7 @@ mcmc_online = function( par, par_index, A, W, B, Y, x, z, steps, burnin, ind,
                               Xn, Dn_omega, W, n_cores, x)
         B = B_Dn[[1]]; names(B) = EIDs
         Dn = B_Dn[[2]]; names(Dn) = EIDs
+        RBC_rule_vec = B_Dn[[3]]
         # ----------------------------------------------------------------------
         # ----------------------------------------------------------------------
         
@@ -235,7 +236,7 @@ mcmc_online = function( par, par_index, A, W, B, Y, x, z, steps, burnin, ind,
     return(list( chain=chain, B_chain=B_chain, hc_chain=hc_chain, hr_chain=hr_chain, 
                 bp_chain=bp_chain, la_chain = la_chain, A_chain = A_chain, otype=otype,
                 accept=accept/(steps-burnin), pscale=pscale, pcov = pcov,
-                par_index=par_index, ttt = ttt))
+                par_index=par_index, ttt = ttt, RBC_rule_vec = RBC_rule_vec))
 }
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
@@ -395,7 +396,7 @@ add_data = function(it_num, pred_id, data_format, b_curr, Y_curr_EIDs,
 
 plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain, 
                          Map_chain, La_chain, it_num, prev_state_avg,
-                         ind_list, prev_ind_list) {
+                         ind_list, prev_ind_list, RBC_rule_vec) {
     
     pdf_title = paste0("Plots/iteration_", it_num, ".pdf")
     pdf(pdf_title)
@@ -440,11 +441,11 @@ plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain,
         # Heart Rate and MAP double plot -----------------------------------------
         if(mean(use_data[indices_i, 'clinic_rule']) != 0) {
             title_name = paste0('Heart Rate & MAP: ', i, ', RBC Rule = ', 
-                                mean(use_data[indices_i, 'RBC_rule']),
-                                ', clinic = ', mean(use_data[indices_i, 'clinic_rule']))
+                                RBC_rule_vec[ind_i], ', clinic = ', 
+                                mean(use_data[indices_i, 'clinic_rule']))
         } else {
             title_name = paste0('Heart Rate & MAP: ', i, ', RBC Rule = ', 
-                                mean(use_data[indices_i, 'RBC_rule']))
+                                RBC_rule_vec[ind_i])
         }
         
         hr_upper = colQuantiles( Hr_chain[, indices_i, drop=F], probs=.975)
@@ -483,11 +484,11 @@ plotting_fnc <- function(use_data, EIDs, B_chain, Hc_chain, Hr_chain,
         # Hemoglobin and Lactate double plot -------------------------------------
         if(mean(use_data[indices_i, 'clinic_rule']) != 0) {
             title_name = paste0('Hemoglobin & Lactate: ', i, ', RBC Rule = ', 
-                                mean(use_data[indices_i, 'RBC_rule']),
-                                ', clinic = ', mean(use_data[indices_i, 'clinic_rule']))
+                                RBC_rule_vec[ind_i], ', clinic = ',
+                                mean(use_data[indices_i, 'clinic_rule']))
         } else {
             title_name = paste0('Hemoglobin & Lactate: ', i, ', RBC Rule = ',
-                                mean(use_data[indices_i, 'RBC_rule']))
+                                RBC_rule_vec[ind_i])
         }
         
         hc_upper = colQuantiles( Hc_chain[, indices_i, drop=F], probs=.975)
