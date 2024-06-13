@@ -204,9 +204,11 @@ while(nrow(Y) > 0) {
     }
     
     # Save information to translate to R-Shiny App -----------------------------
-    info_list = list(df_sub_start, EIDs, B_chain, Hc_chain, Hr_chain, Map_chain, 
-                     La_chain, it_num, prev_state_avg, ind_list, prev_ind_list,
-                     RBC_rule_vec)
+    info_list = list(use_data = df_sub_start, EIDs = EIDs, B_chain = B_chain, 
+                     Hc_chain = Hc_chain, Hr_chain = Hr_chain, Map_chain = Map_chain, 
+                     La_chain = La_chain, it_num = it_num, prev_state_avg = prev_state_avg, 
+                     ind_list = ind_list, prev_ind_list = prev_ind_list,
+                     RBC_rule_vec = RBC_rule_vec)
     save(info_list, file = 'Model_out/info_list.rda')
     
     # if(it_num == 1 | it_num %% 5 == 0) {
